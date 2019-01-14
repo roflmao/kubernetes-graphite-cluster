@@ -122,7 +122,7 @@ Optional Variables:
   mgmt_port: 8126,
   servers: [ {server: "./servers/udp", port: 8125} ], 
   backends: [ "./backends/graphite" ],
-  graphiteHost: "carbon-relay",
+  graphiteHost: process.env.GRAPHITE_HOST,
   graphiteProtocol: "pickle",
   graphitePort: 2003,
   graphitePicklePort: 2004, 

@@ -1,4 +1,4 @@
-DOCKER_REPOSITORY?=nanit
+DOCKER_REPOSITORY?=roflmao
 SUDO?=sudo
 
 STATSD_PROXY_APP_NAME=statsd
@@ -8,6 +8,7 @@ STATSD_PROXY_IMAGE_TAG=$(shell git log -n 1 --pretty=format:%h $(STATSD_PROXY_DO
 STATSD_PROXY_IMAGE_NAME=$(DOCKER_REPOSITORY)/$(STATSD_PROXY_APP_NAME):$(STATSD_PROXY_IMAGE_TAG)
 STATSD_PROXY_REPLICAS?=$(shell curl -s config/$(NANIT_ENV)/$(STATSD_PROXY_APP_NAME)/replicas)
 STATSD_PROXY_ADDITIONAL_YAML?=$(shell curl -s config/$(NANIT_ENV)/$(STATSD_PROXY_APP_NAME)/additional_yaml)
+export NS=monitoring
 
 define generate-statsd-proxy-svc
 	sed -e 's/{{APP_NAME}}/$(STATSD_PROXY_APP_NAME)/g' kube/$(STATSD_PROXY_DIR_NAME)/svc.yml
@@ -19,14 +20,14 @@ define generate-statsd-proxy-dep
 endef
 
 deploy-statsd-proxy: docker-statsd-proxy
-	kubectl get svc $(STATSD_PROXY_APP_NAME) || $(call generate-statsd-proxy-svc) | kubectl create -f -
-	$(call generate-statsd-proxy-dep) | kubectl apply -f -
+	kubectl -n ${NS} get svc $(STATSD_PROXY_APP_NAME) || $(call generate-statsd-proxy-svc) | kubectl -n ${NS} create -f -
+	$(call generate-statsd-proxy-dep) | kubectl -n ${NS} apply -f -
 
 docker-statsd-proxy:
 	$(SUDO) docker pull $(STATSD_PROXY_IMAGE_NAME) || ($(SUDO) docker build -t $(STATSD_PROXY_IMAGE_NAME) $(STATSD_PROXY_DOCKER_DIR) && $(SUDO) docker push $(STATSD_PROXY_IMAGE_NAME))
 
 clean-statsd-proxy:
-	kubectl delete deployment $(STATSD_PROXY_APP_NAME) || true
+	kubectl -n ${NS} delete deployment $(STATSD_PROXY_APP_NAME) || true
 
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 STATSD_DAEMON_APP_NAME=statsd-daemon
@@ -47,14 +48,14 @@ define generate-statsd-daemon-dep
 endef
 
 deploy-statsd-daemon: docker-statsd-daemon
-	kubectl get svc $(STATSD_DAEMON_APP_NAME) || $(call generate-statsd-daemon-svc) | kubectl create -f -
-	$(call generate-statsd-daemon-dep) | kubectl apply -f -
+	kubectl -n ${NS} get svc $(STATSD_DAEMON_APP_NAME) || $(call generate-statsd-daemon-svc) | kubectl -n ${NS} create -f -
+	$(call generate-statsd-daemon-dep) | kubectl -n ${NS} apply -f -
 
 docker-statsd-daemon:
 	$(SUDO) docker pull $(STATSD_DAEMON_IMAGE_NAME) || ($(SUDO) docker build -t $(STATSD_DAEMON_IMAGE_NAME) $(STATSD_DAEMON_DOCKER_DIR) && $(SUDO) docker push $(STATSD_DAEMON_IMAGE_NAME))
 
 clean-statsd-daemon:
-	kubectl delete deployment $(STATSD_DAEMON_APP_NAME) || true
+	kubectl -n ${NS} delete deployment $(STATSD_DAEMON_APP_NAME) || true
 
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 CARBON_RELAY_APP_NAME=carbon-relay
@@ -75,15 +76,15 @@ define generate-carbon-relay-dep
 endef
 
 deploy-carbon-relay: docker-carbon-relay
-	kubectl get svc $(CARBON_RELAY_APP_NAME) || $(call generate-carbon-relay-svc) | kubectl create -f -
-	$(call generate-carbon-relay-dep) | kubectl apply -f -
+	kubectl -n ${NS} get svc $(CARBON_RELAY_APP_NAME) || $(call generate-carbon-relay-svc) | kubectl -n ${NS} create -f -
+	$(call generate-carbon-relay-dep) | kubectl -n ${NS} apply -f -
 
 docker-carbon-relay:
 	$(SUDO) docker pull $(CARBON_RELAY_IMAGE_NAME) || ($(SUDO) docker build -t $(CARBON_RELAY_IMAGE_NAME) $(CARBON_RELAY_DOCKER_DIR) && $(SUDO) docker push $(CARBON_RELAY_IMAGE_NAME))
 
 clean-carbon-relay:
-	kubectl delete deployment $(CARBON_RELAY_APP_NAME) || true
-	kubectl delete svc $(CARBON_RELAY_APP_NAME) || true
+	kubectl -n ${NS} delete deployment $(CARBON_RELAY_APP_NAME) || true
+	kubectl -n ${NS} delete svc $(CARBON_RELAY_APP_NAME) || true
 
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 GRAPHITE_NODE_APP_NAME=graphite-node
@@ -109,15 +110,15 @@ define generate-graphite-node-dep
 endef
 
 deploy-graphite-node: docker-graphite-node
-	kubectl get svc $(GRAPHITE_NODE_APP_NAME) || $(call generate-graphite-node-svc) | kubectl create -f -
-	$(call generate-graphite-node-dep) | kubectl apply -f -
+	kubectl -n ${NS} get svc $(GRAPHITE_NODE_APP_NAME) || $(call generate-graphite-node-svc) | kubectl -n ${NS} create -f -
+	$(call generate-graphite-node-dep) | kubectl -n ${NS} apply -f -
 
 docker-graphite-node:
 	$(SUDO) docker pull $(GRAPHITE_NODE_IMAGE_NAME) || ($(SUDO) docker build -t $(GRAPHITE_NODE_IMAGE_NAME) $(GRAPHITE_NODE_DOCKER_DIR) && $(SUDO) docker push $(GRAPHITE_NODE_IMAGE_NAME))
 
 clean-graphite-node:
-	kubectl delete statefulset $(GRAPHITE_NODE_APP_NAME) || true
-	kubectl delete pvc -l app=$(GRAPHITE_NODE_APP_NAME) || true
+	kubectl -n ${NS} delete statefulset $(GRAPHITE_NODE_APP_NAME) || true
+	kubectl -n ${NS} delete pvc -l app=$(GRAPHITE_NODE_APP_NAME) || true
 
 #-------------------------------------------------------------------------------------------------------------------------------------------------
 GRAPHITE_MASTER_APP_NAME=graphite
@@ -137,7 +138,7 @@ define generate-graphite-master-dep
 endef
 
 RBAC_DIR_NAME=rbac
-RBAC_API_VERSION=$(shell (kubectl api-versions | grep rbac. | grep -sE v1$$) || (kubectl api-versions | grep rbac. | grep -sE v1beta1$$) || (kubectl api-versions | grep rbac. | grep -sE v1alpha1$$) || echo "")
+RBAC_API_VERSION=$(shell (kubectl -n ${NS} api-versions | grep rbac. | grep -sE v1$$) || (kubectl -n ${NS} api-versions | grep rbac. | grep -sE v1beta1$$) || (kubectl -n ${NS} api-versions | grep rbac. | grep -sE v1alpha1$$) || echo "")
 
 define generate-rbac-role
 	sed -e 's;{{RBAC_API_VERSION}};$(RBAC_API_VERSION);g' kube/$(RBAC_DIR_NAME)/role.yml
@@ -149,25 +150,25 @@ endef
 
 deploy-rbac:
 	if [ -z "$(RBAC_API_VERSION)" ]; then exit 1; fi
-	kubectl apply -f kube/rbac/serviceaccount.yml
-	$(call generate-rbac-role) | kubectl apply -f -
-	$(call generate-rbac-rolebinding) | kubectl apply -f -
+	kubectl -n ${NS} apply -f kube/rbac/serviceaccount.yml
+	$(call generate-rbac-role) | kubectl -n ${NS} apply -f -
+	$(call generate-rbac-rolebinding) | kubectl -n ${NS} apply -f -
 
 clean-rbac:
 	if [ -z "$(RBAC_API_VERSION)" ]; then exit 1; fi
-	kubectl delete serviceaccount graphite-cluster-sa || true
-	kubectl delete rolebinding read-endpoints || true
-	kubectl delete role endpoints-reader || true
+	kubectl -n ${NS} delete serviceaccount graphite-cluster-sa || true
+	kubectl -n ${NS} delete rolebinding read-endpoints || true
+	kubectl -n ${NS} delete role endpoints-reader || true
 
 deploy-graphite-master: docker-graphite-master
-	kubectl get svc $(GRAPHITE_MASTER_APP_NAME) || $(call generate-graphite-master-svc) | kubectl create -f -
-	$(call generate-graphite-master-dep) | kubectl apply -f -
+	kubectl -n ${NS} get svc $(GRAPHITE_MASTER_APP_NAME) || $(call generate-graphite-master-svc) | kubectl -n ${NS} create -f -
+	$(call generate-graphite-master-dep) | kubectl -n ${NS} apply -f -
 
 docker-graphite-master:
 	$(SUDO) docker pull $(GRAPHITE_MASTER_IMAGE_NAME) || ($(SUDO) docker build -t $(GRAPHITE_MASTER_IMAGE_NAME) $(GRAPHITE_MASTER_DOCKER_DIR) && $(SUDO) docker push $(GRAPHITE_MASTER_IMAGE_NAME))
 
 clean-graphite-master:
-	kubectl delete deployment $(GRAPHITE_MASTER_APP_NAME) || true
+	kubectl -n ${NS} delete deployment $(GRAPHITE_MASTER_APP_NAME) || true
 
 
 deploy: deploy-rbac deploy-graphite-node deploy-statsd-daemon deploy-statsd-proxy deploy-carbon-relay deploy-graphite-master
@@ -175,10 +176,10 @@ deploy: deploy-rbac deploy-graphite-node deploy-statsd-daemon deploy-statsd-prox
 clean: clean-statsd-proxy clean-statsd-daemon clean-carbon-relay clean-graphite-node clean-graphite-master clean-rbac
 
 verify-statsd:
-	kubectl exec $(name) -- cat proxyConfig.js | grep host
+	kubectl -n ${NS} exec $(name) -- cat proxyConfig.js | grep host
 
 verify-carbon:
-	kubectl exec $(name) -- cat /opt/graphite/conf/carbon.conf | grep DESTINATIONS
+	kubectl -n ${NS} exec $(name) -- cat /opt/graphite/conf/carbon.conf | grep DESTINATIONS
 
 verify-graphite:
-	kubectl exec $(name) -- cat /opt/graphite/webapp/graphite/local_settings.py | grep CLUSTER_SERVERS
+	kubectl -n ${NS} exec $(name) -- cat /opt/graphite/webapp/graphite/local_settings.py | grep CLUSTER_SERVERS

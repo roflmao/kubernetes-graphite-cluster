@@ -5,6 +5,7 @@ WORKDIR /app
 RUN git clone https://github.com/etsy/statsd.git
 WORKDIR /app/statsd
 COPY config.js .
+ENV GRAPHITE_HOST carbon-relay
 
 EXPOSE 8125/udp 8126
 
